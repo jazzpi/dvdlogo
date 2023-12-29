@@ -16,8 +16,9 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#define SPEED    2
-#define NTHREADS 1
+#define SPEED      1
+#define NTHREADS   2
+#define SATURATION 0.75
 
 int connect_to(const char* addr, const char* port) {
   struct addrinfo hints;
@@ -138,13 +139,16 @@ void* child(void* arg) {
       for (unsigned col = 0; col < LOGO_width; col++) {
         unsigned x = x_pos + col;
         unsigned y = y_pos + row;
-        int8_t px = img[row * LOGO_width + col];
+        uint8_t px = img[row * LOGO_width + col];
         if (px == 0) {
           // Just let others clear the rest
           continue;
+        } else if (px == 0x88) {
+          sprintf(buf, "PX %d %d 000000\n", x, y);
+        } else {
+          sprintf(buf, "PX %d %d %02hhx%02hhx%02hhx\n", x, y, color[0],
+                  color[1], color[2]);
         }
-        sprintf(buf, "PX %d %d %02hhx%02hhx%02hhx\n", x, y, color[0], color[1],
-                color[2]);
         if (send(fd, buf, strlen(buf), 0) != (ssize_t)strlen(buf)) {
           perror("send");
           free(buf);
@@ -174,13 +178,7 @@ int main(int argc, char** argv) {
   for (unsigned row = 0; row < LOGO_height; row++) {
     for (unsigned col = 0; col < LOGO_width; col++) {
       HEADER_PIXEL(LOGO_header_data, px);
-      if (px[0] == 0) {
-        assert(px[1] == 0 && px[2] == 0);
-      } else {
-        assert(px[0] == 255 && px[1] == 255 && px[2] == 255);
-      }
-      img[row * LOGO_width + col]
-          = ~px[0]; // for some reason, the image is inverted
+      img[row * LOGO_width + col] = px[0];
     }
   }
 
@@ -191,7 +189,7 @@ int main(int argc, char** argv) {
   dir_t dir = SE;
   double hue = 0;
   int colint[3];
-  HSVtoRGB(hue, 1, 1, colint + 0, colint + 1, colint + 2);
+  HSVtoRGB(hue, SATURATION, 1, colint + 0, colint + 1, colint + 2);
   color[0] = colint[0];
   color[1] = colint[1];
   color[2] = colint[2];
@@ -274,7 +272,7 @@ int main(int argc, char** argv) {
       if (dir != prev_dir) {
         hue = fmod(hue + 45, 360);
         printf("Hue: %f\n", hue);
-        HSVtoRGB(hue, 1, 1, colint + 0, colint + 1, colint + 2);
+        HSVtoRGB(hue, SATURATION, 1, colint + 0, colint + 1, colint + 2);
         color[0] = colint[0];
         color[1] = colint[1];
         color[2] = colint[2];
